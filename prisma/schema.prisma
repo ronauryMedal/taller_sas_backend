@@ -1,0 +1,262 @@
+// ============================================================
+// SAS Taller - Schema de Prisma
+// Tabla raíz: TALLER (1 taller → muchos usuarios, clientes, servicios, trabajos)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ------------------------------------------------------------
+// Tabla TALLER (tabla raíz del sistema)
+// ------------------------------------------------------------
+model Taller {
+  id        String   @id @default(uuid())  // PK, identificador único
+  nombre    String                         // Nombre del taller
+  rnc       String?                        // Opcional (RNC / identificación fiscal)
+  telefono  String?
+  email     String?
+  direccion String?
+  activo    Boolean  @default(true)        // Si el taller está activo
+  createdAt DateTime @default(now())     // created_at en BD
+
+  // Relación: 1 taller → muchos
+  usuarios   Usuario[]
+  empleados  Empleado[]
+  clientes   Cliente[]
+  servicios  Servicio[]
+  trabajos   Trabajo[]
+  facturas   Factura[]
+}
+
+// ------------------------------------------------------------
+// Rol de usuario en el sistema
+// ------------------------------------------------------------
+enum Rol {
+  ADMIN
+  EMPLEADO
+}
+
+// ------------------------------------------------------------
+// Tabla USUARIOS (usuarios que entran al sistema)
+// ------------------------------------------------------------
+model Usuario {
+  id        String   @id @default(uuid())
+  tallerId  String   // FK → Taller (workshop_id)
+  taller    Taller   @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+  nombre    String
+  email     String   @unique
+  password  String
+  rol       Rol      @default(EMPLEADO)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  empleado Empleado?  // Un usuario puede ser empleado, pero no es obligatorio
+
+  @@unique([tallerId, email])
+}
+
+// ------------------------------------------------------------
+// Tabla EMPLEADOS (empleado operativo - quien hace trabajos)
+// ------------------------------------------------------------
+model Empleado {
+  id                 String   @id @default(uuid())
+  tallerId           String   // FK → Taller (workshop_id)
+  taller             Taller   @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+  usuarioId          String?  @unique // Opcional: un usuario puede ser empleado
+  usuario            Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  nombre             String
+  telefono           String?
+  porcentajeComision Decimal  @default(0) @db.Decimal(5, 2) // ej. 10.50
+  activo             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  trabajos Trabajo[]
+}
+
+// ------------------------------------------------------------
+// Tabla CLIENTES (clientes que llevan piezas)
+// ------------------------------------------------------------
+model Cliente {
+  id        String   @id @default(uuid())
+  tallerId  String   // FK → Taller (workshop_id)
+  taller    Taller   @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+  nombre    String
+  telefono  String?
+  email     String?
+  empresa   String?
+  notas     String?  @db.Text
+  createdAt DateTime @default(now())
+
+  trabajos        Trabajo[]
+  notificaciones  Notificacion[]
+}
+
+// ------------------------------------------------------------
+// Tabla SERVICIOS (catálogo editable por taller)
+// ------------------------------------------------------------
+model Servicio {
+  id        String   @id @default(uuid()) // Identificador único del servicio (UUID)
+  tallerId  String   // FK → Taller (workshop_id), referencia al taller dueño del catálogo de servicios
+  taller    Taller   @relation(fields: [tallerId], references: [id], onDelete: Cascade) // Relación al taller correspondiente; si el taller se elimina, también se eliminan sus servicios
+  codigo    String   // Código interno o abreviado para identificar rápidamente el servicio dentro del taller
+  nombre    String   // Nombre descriptivo y visible del servicio (ej: "Cambio de aceite")
+  precio    Decimal  @db.Decimal(10, 2) // Precio base del servicio; dos decimales para pesos/dólares
+  descripcion String? @db.Text // Descripción detallada del servicio (opcional)
+  activo    Boolean  @default(true) // True si el servicio está disponible para su uso; false para ocultar/deshabilitar
+  createdAt DateTime @default(now()) // Fecha y hora de creación del registro para control y auditoría
+
+  trabajosDondeSeUsa TrabajoServicio[]
+}
+
+// ------------------------------------------------------------
+// Estado del trabajo (pieza en el taller)
+// ------------------------------------------------------------
+enum EstadoTrabajo {
+  PENDIENTE   // Recibido, sin iniciar
+  EN_PROCESO  // En reparación
+  TERMINADO   // Trabajo listo
+  ENTREGADO   // Entregado al cliente
+}
+
+// ------------------------------------------------------------
+// Tabla TRABAJOS (la pieza física que entra al taller)
+// ------------------------------------------------------------
+model Trabajo {
+  id                String        @id @default(uuid())
+  tallerId          String        // FK → Taller (workshop_id)
+  taller            Taller        @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+  clienteId         String        // FK → Cliente
+  cliente           Cliente       @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  empleadoId        String?       // FK → Empleado (asignado cuando se inicia el trabajo)
+  empleado          Empleado?     @relation(fields: [empleadoId], references: [id], onDelete: SetNull)
+  codigoTrabajo     String
+  descripcionPieza  String        @db.Text
+  estado            EstadoTrabajo @default(PENDIENTE)
+  fechaEntrada      DateTime      @default(now())
+  fechaInicio       DateTime?
+  fechaFinal        DateTime?
+  observaciones     String?       @db.Text
+  createdAt         DateTime      @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  pagos           Pago[]
+  facturas        Factura[]
+  notificaciones  Notificacion[]
+  serviciosEnTrabajo TrabajoServicio[]
+
+  @@index([tallerId])
+  @@index([clienteId])
+  @@index([empleadoId])
+  @@index([estado])
+}
+
+// ------------------------------------------------------------
+// Servicios aplicados a un trabajo (N:N entre Trabajo y Servicio)
+// ------------------------------------------------------------
+model TrabajoServicio {
+  id             String   @id @default(uuid())
+  trabajoId      String
+  trabajo        Trabajo   @relation(fields: [trabajoId], references: [id], onDelete: Cascade)
+  servicioId     String
+  servicio       Servicio @relation(fields: [servicioId], references: [id], onDelete: Restrict)
+  cantidad      Int       @default(1)
+  precioUnitario Decimal? @db.Decimal(10, 2) // Precio en el momento del trabajo (opcional; si no se guarda, usar el del catálogo)
+  subtotal       Decimal? @db.Decimal(10, 2) // Subtotal del servicio en el trabajo (opcional; si no se guarda, usar el del catálogo)
+  createdAt      DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  @@unique([trabajoId, servicioId])
+  @@index([trabajoId])
+  @@index([servicioId])
+  @@index([deletedAt])
+}
+
+// ------------------------------------------------------------
+// Método de pago
+// ------------------------------------------------------------
+enum MetodoPago {
+  EFECTIVO
+  TARJETA
+  TRANSFERENCIA
+  CHEQUE
+  OTRO
+}
+
+// ------------------------------------------------------------
+// Estado del pago
+// ------------------------------------------------------------
+enum EstadoPago {
+  PENDIENTE
+  COMPLETADO
+  ANULADO
+}
+
+// ------------------------------------------------------------
+// Tabla PAGOS (pagos del trabajo)
+// ------------------------------------------------------------
+model Pago {
+  id         String     @id @default(uuid())
+  trabajoId  String     // FK → Trabajo
+  trabajo    Trabajo    @relation(fields: [trabajoId], references: [id], onDelete: Cascade)
+  monto      Decimal    @db.Decimal(10, 2)
+  metodoPago MetodoPago
+  estado     EstadoPago @default(PENDIENTE)
+  fechaPago  DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  @@index([trabajoId])
+  @@index([estado])
+  @@index([metodoPago])
+  @@index([deletedAt])
+}
+
+// ------------------------------------------------------------
+// Tabla FACTURAS (factura imprimible)
+// ------------------------------------------------------------
+model Factura {
+  id            String   @id @default(uuid())
+  trabajoId     String
+  trabajo       Trabajo  @relation(fields: [trabajoId], references: [id], onDelete: Cascade)
+  tallerId      String
+  taller        Taller   @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+  numeroFactura String
+  subtotal      Decimal  @db.Decimal(10, 2)
+  impuestos     Decimal  @db.Decimal(10, 2)
+  total         Decimal  @db.Decimal(10, 2)
+  fechaEmision  DateTime
+
+  @@index([trabajoId])
+  @@index([tallerId])
+}
+
+// ------------------------------------------------------------
+// Canal de notificación (WhatsApp / email)
+// ------------------------------------------------------------
+enum TipoNotificacion {
+  EMAIL
+  WHATSAPP
+}
+
+// ------------------------------------------------------------
+// Tabla NOTIFICACIONES (historial para WhatsApp / email)
+// ------------------------------------------------------------
+model Notificacion {
+  id        String           @id @default(uuid())
+  clienteId String           // FK → Cliente
+  cliente   Cliente          @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  trabajoId String           // FK → Trabajo
+  trabajo   Trabajo          @relation(fields: [trabajoId], references: [id], onDelete: Cascade)
+  tipo      TipoNotificacion
+  mensaje   String           @db.Text
+  enviado   Boolean          @default(false)
+  createdAt DateTime         @default(now())
+}
