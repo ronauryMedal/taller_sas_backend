@@ -11,7 +11,7 @@ Cómo proteger rutas con JWT y restringir acceso por rol (ADMIN / EMPLEADO).
 | **JwtAuthGuard** | `src/auth/jwt-auth.guard.ts` | Exige un JWT válido. Sin token → 401. Deja en `req.user` los datos del usuario (userId, email, rol, tallerId). |
 | **RolesGuard** | `src/auth/roles.guard.ts` | Comprueba que `req.user.rol` sea uno de los roles indicados en `@Roles()`. Sin rol permitido → 403. |
 | **@Roles(...)** | `src/auth/roles.decorator.ts` | Marca una ruta (o todo el controlador) con los roles que pueden acceder. |
-| **Rol** | `src/auth/roles.enum.ts` | Enum: `Rol.ADMIN`, `Rol.EMPLEADO` (coincide con el enum en Prisma). |
+| **Rol** | `src/auth/roles.enum.ts` | Enum: `Rol.SUPER_ADMIN`, `Rol.ADMIN`, `Rol.EMPLEADO` (coincide con el enum en Prisma). |
 
 Los guards y el decorador se pueden importar desde `src/auth` o desde los archivos concretos.
 
@@ -162,6 +162,7 @@ O con un decorador propio (opcional) puedes crear `@User()` que devuelva `req.us
 |----------|----------------------|
 | Ruta pública (sin login) | No poner ningún guard. |
 | Solo login (cualquier rol) | `@UseGuards(JwtAuthGuard)` |
+| Solo SUPER_ADMIN | `@UseGuards(JwtAuthGuard, RolesGuard)` + `@Roles(Rol.SUPER_ADMIN)` |
 | Solo ADMIN | `@UseGuards(JwtAuthGuard, RolesGuard)` + `@Roles(Rol.ADMIN)` |
 | ADMIN o EMPLEADO | `@UseGuards(JwtAuthGuard, RolesGuard)` + `@Roles(Rol.ADMIN, Rol.EMPLEADO)` |
 

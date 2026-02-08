@@ -10,9 +10,6 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
-import { Rol } from '../auth/roles.enum';
 import { CreateTallerDto, UpdateTallerDto } from './dto';
 import { TallerService } from './taller.service';
 
@@ -37,21 +34,17 @@ export class TallerController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ADMIN)
-  @ApiOperation({ summary: 'Crear un taller (solo ADMIN)' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Crear un taller' })
   @ApiResponse({ status: 201, description: 'Taller creado' })
-  @ApiResponse({ status: 403, description: 'Sin permiso' })
   create(@Body() createTallerDto: CreateTallerDto) {
     return this.tallerService.create(createTallerDto);
   }
 
   @Put(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ADMIN)
-  @ApiOperation({ summary: 'Actualizar un taller (solo ADMIN)' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Actualizar un taller' })
   @ApiResponse({ status: 200, description: 'Taller actualizado' })
-  @ApiResponse({ status: 403, description: 'Sin permiso' })
   @ApiResponse({ status: 404, description: 'Taller no encontrado' })
   update(
     @Param('id') id: string,
@@ -61,11 +54,9 @@ export class TallerController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Rol.ADMIN)
-  @ApiOperation({ summary: 'Eliminar un taller (solo ADMIN)' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Eliminar un taller' })
   @ApiResponse({ status: 200, description: 'Taller eliminado' })
-  @ApiResponse({ status: 403, description: 'Sin permiso' })
   @ApiResponse({ status: 404, description: 'Taller no encontrado' })
   remove(@Param('id') id: string) {
     return this.tallerService.remove(id);

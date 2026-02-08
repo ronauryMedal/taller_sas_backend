@@ -39,6 +39,7 @@ function prefijoDesdeNombre(nombre: string): string {
 export class ServicioService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Crea un servicio en el taller indicado (tallerId en el body). */
   async create(createServicioDto: CreateServicioDto) {
     const { tallerId, nombre, precio, descripcion } = createServicioDto;
     const prefijo = prefijoDesdeNombre(nombre);
@@ -71,11 +72,12 @@ export class ServicioService {
     }
   }
 
-  async findAll(tallerId?: string, soloActivos = true) {
+  /** Lista solo los servicios del taller (cada taller ve solo los suyos). */
+  async findAll(tallerId: string, soloActivos = true) {
     try {
       return await this.prisma.servicio.findMany({
       where: {
-        ...(tallerId ? { tallerId } : {}),
+        tallerId,
         ...(soloActivos ? { activo: true } : {}),
       },
       orderBy: { createdAt: 'desc' },
@@ -87,10 +89,11 @@ export class ServicioService {
     }
   }
 
-  async findOne(id: string) {
+  /** Obtiene un servicio por ID solo si pertenece al taller del usuario. */
+  async findOne(id: string, tallerId: string) {
     try {
-      const servicio = await this.prisma.servicio.findUnique({
-      where: { id },
+      const servicio = await this.prisma.servicio.findFirst({
+      where: { id, tallerId },
       select: servicioSelect,
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
@@ -101,12 +104,13 @@ export class ServicioService {
     }
   }
 
-  async update(id: string, updateServicioDto: UpdateServicioDto) {
-    await this.findOne(id);
+  async update(id: string, updateServicioDto: UpdateServicioDto, tallerId: string) {
+    await this.findOne(id, tallerId);
+    const { tallerId: _omit, ...data } = updateServicioDto as UpdateServicioDto & { tallerId?: string };
     try {
       return await this.prisma.servicio.update({
       where: { id },
-      data: updateServicioDto,
+      data,
       select: servicioSelect,
     });
     } catch (error) {
@@ -115,9 +119,9 @@ export class ServicioService {
     }
   }
 
-  /** Soft delete: marca el servicio como inactivo (activo = false). */
-  async remove(id: string) {
-    await this.findOne(id);
+  /** Soft delete: marca el servicio como inactivo (activo = false). Solo del propio taller. */
+  async remove(id: string, tallerId: string) {
+    await this.findOne(id, tallerId);
     try {
       return await this.prisma.servicio.update({
       where: { id },
