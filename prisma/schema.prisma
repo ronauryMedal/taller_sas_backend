@@ -39,6 +39,7 @@ model Taller {
 enum Rol {
   ADMIN
   EMPLEADO
+  SUPER_ADMIN
 }
 
 // ------------------------------------------------------------
